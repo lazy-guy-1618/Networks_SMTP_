@@ -140,17 +140,10 @@ void handleMail(int clientSocket, const char* username, const char* domain) {
 
     // Send acknowledgment on connection
     sprintf(buffer,"220 <%s> Service ready\0",domain);
-    if (write(clientSocket, buffer, strlen(buffer)) == -1) {
-        perror("Error sending acknowledgment");
-        return;
-    }
+    sendCommand(clientSocket,buffer);
     printf("S: %s\n",buffer);
-    bzero(buffer,sizeof(buffer));
     // Read the HELO message from the client
-    if (recv(clientSocket, buffer, sizeof(buffer),0) == -1) {
-        perror("Error reading client HELO message");
-        return;
-    }
+    recvResponse(clientSocket,buffer);
         // Print the client's HELO message
 
     printf("C: %s\n",buffer);
@@ -159,12 +152,8 @@ void handleMail(int clientSocket, const char* username, const char* domain) {
     // Send a response to the client (you may need to customize this)
     char response[MAX_BUFFER_SIZE];
     sprintf(response,"250 OK %s\0",buffer);
-    int bytes_sent=send(clientSocket, response, strlen(response),0);
-    if(bytes_sent == -1) {
-        perror("Error sending response to client");
-        return;
-    }
-        printf("S: %d : %s\n",bytes_sent,response);
+    sendCommand(clientSocket,response);
+        printf("S: %s\n",response);
 }
 
 void createUserDirectory(const char* username) {
