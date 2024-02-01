@@ -76,22 +76,16 @@ void recvResponse(int clientSocket,char* buffer)
 {
 ssize_t bytesRead;
     size_t totalBytesRead = 0;
+        bzero(buffer,MAX_BUFFER_SIZE);
 
     // Loop until the entire message is received
-    while ((bytesRead = read(clientSocket, buffer + totalBytesRead, sizeof(buffer) - totalBytesRead - 1)) > 0) {
+    while ((bytesRead = recv(clientSocket, buffer + totalBytesRead, MAX_BUFFER_SIZE - totalBytesRead , 0)) > 0) {
         totalBytesRead += bytesRead;
-        // Check if the message is complete (you need some condition based on your protocol)
+        // Check for end of message condition
         if (strstr(buffer, "\0") != NULL) {
-            break;  // Message complete, exit the loop
+            break;
         }
 
-        // Ensure there is space for the null terminator
-        if (totalBytesRead >= sizeof(buffer) - 1) {
-            printf("\n%d\n",totalBytesRead);
-            fprintf(stderr, "Message too large for buffer\n");
-            close(clientSocket);
-            exit(EXIT_FAILURE);
-        }
     }
 
     if (bytesRead == -1) {
@@ -205,17 +199,10 @@ void sendMail(const char* serverIP, int smtpPort) {
     printf("Subject: %s\n", subject);
     printf("body: %s\n", body);
 
-    // if (sscanf(mail, "From: %[^\n]\nTo: %[^\n]\nSubject: %[^\n]", from, to, subject) != 3 ||
-    //     strchr(from, '@') == NULL || strchr(to, '@') == NULL) {
-    //     // Incorrect format
-    //     printf("Incorrect format. Please enter the mail again.\n");
-    //     close(clientSocket);
-    //     return;
-    // }
 
     bzero(buffer,sizeof(buffer));
     // Read the initial response from the server
-    if (read(clientSocket, buffer, sizeof(buffer)) == -1) {
+    if (recv(clientSocket, buffer, sizeof(buffer),0) == -1) {
         perror("Error reading server response");
         close(clientSocket);
         exit(EXIT_FAILURE);
@@ -223,22 +210,20 @@ void sendMail(const char* serverIP, int smtpPort) {
 
     // Print the initial response
     printf("S: %s\n", buffer);
-    bzero(buffer,sizeof(buffer));
 
     // Send HELO command
     char command[MAX_BUFFER_SIZE];
-    snprintf(command, sizeof(command), "HELO %s\n", serverIP);
+    snprintf(command, sizeof(command), "HELO %s\0", serverIP);
     sendCommand(clientSocket,command);
     // Read the response to HELO command
-    
-    recvResponse(clientSocket,buffer);
 
+    recvResponse(clientSocket,buffer);
     // Print the response to HELO command
     printf("S: %s\n", buffer);
+    bzero(command,MAX_BUFFER_SIZE);
+    snprintf(command, sizeof(command), "MAIL FROM: %s\0", from);
+    sendCommand(clientSocket,command);
 
-    // Implement the rest of the SMTP commands (MAIL, RCPT, DATA, QUIT) following the example
-    // You need to read user input and send the corresponding SMTP commands
-    // Read the responses from the server and print them
 
     // Close the client socket
     close(clientSocket);

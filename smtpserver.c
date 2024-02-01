@@ -17,6 +17,41 @@ void handleMail(int clientSocket, const char* username, const char* domain);
 
 // Function to create user subdirectory if it doesn't exist
 void createUserDirectory(const char* username);
+void sendCommand(int clientSocket,char* command)
+{
+    if (write(clientSocket, command, strlen(command)) == -1) {
+        perror("Error sending HELO command");
+        close(clientSocket);
+        exit(EXIT_FAILURE);
+    }
+}
+void recvResponse(int clientSocket,char* buffer)
+{
+ssize_t bytesRead;
+    size_t totalBytesRead = 0;
+        bzero(buffer,MAX_BUFFER_SIZE);
+
+    // Loop until the entire message is received
+    while ((bytesRead = recv(clientSocket, buffer + totalBytesRead, MAX_BUFFER_SIZE - totalBytesRead , 0)) > 0) {
+        totalBytesRead += bytesRead;
+        // Check for end of message condition
+        if (strstr(buffer, "\0") != NULL) {
+            break;
+        }
+
+    }
+
+    if (bytesRead == -1) {
+        perror("Error reading server response");
+        close(clientSocket);
+        exit(EXIT_FAILURE);
+    }
+
+    // Null-terminate the received data
+    buffer[totalBytesRead] = '\0';
+        // printf("Received message: %s\n", buffer);
+
+}
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -112,7 +147,7 @@ void handleMail(int clientSocket, const char* username, const char* domain) {
     printf("S: %s\n",buffer);
     bzero(buffer,sizeof(buffer));
     // Read the HELO message from the client
-    if (read(clientSocket, buffer, sizeof(buffer)) == -1) {
+    if (recv(clientSocket, buffer, sizeof(buffer),0) == -1) {
         perror("Error reading client HELO message");
         return;
     }
@@ -122,16 +157,14 @@ void handleMail(int clientSocket, const char* username, const char* domain) {
 
 
     // Send a response to the client (you may need to customize this)
-     char response[MAX_BUFFER_SIZE];
-    sprintf(response,"250 OK %s",buffer);
-
-    if (write(clientSocket, response, strlen(response)) == -1) {
+    char response[MAX_BUFFER_SIZE];
+    sprintf(response,"250 OK %s\0",buffer);
+    int bytes_sent=send(clientSocket, response, strlen(response),0);
+    if(bytes_sent == -1) {
         perror("Error sending response to client");
         return;
     }
-        printf("S: %s\n",response);
-
-
+        printf("S: %d : %s\n",bytes_sent,response);
 }
 
 void createUserDirectory(const char* username) {
