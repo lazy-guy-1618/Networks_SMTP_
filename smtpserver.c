@@ -13,48 +13,15 @@
 #define MAX_SUBJECT_SIZE 100
 
 // Function to handle incoming mail
-void handleMail(int clientSocket, const char* username, const char* domain);
+void handleMail(int clientSocket, const char *domain);
 
 // Function to create user subdirectory if it doesn't exist
-void createUserDirectory(const char* username);
-void sendCommand(int clientSocket,char* command)
+void createUserDirectoryandAppend(const char *username, const char *full_buff_from, const char *full_buff_to, const char *full_buff_subject, const char *full_buff_message);
+
+int main(int argc, char *argv[])
 {
-    if (write(clientSocket, command, strlen(command)) == -1) {
-        perror("Error sending HELO command");
-        close(clientSocket);
-        exit(EXIT_FAILURE);
-    }
-}
-void recvResponse(int clientSocket,char* buffer)
-{
-ssize_t bytesRead;
-    size_t totalBytesRead = 0;
-        bzero(buffer,MAX_BUFFER_SIZE);
-
-    // Loop until the entire message is received
-    while ((bytesRead = recv(clientSocket, buffer + totalBytesRead, MAX_BUFFER_SIZE - totalBytesRead , 0)) > 0) {
-        totalBytesRead += bytesRead;
-        // Check for end of message condition
-        if (strstr(buffer, "\0") != NULL) {
-            break;
-        }
-
-    }
-
-    if (bytesRead == -1) {
-        perror("Error reading server response");
-        close(clientSocket);
-        exit(EXIT_FAILURE);
-    }
-
-    // Null-terminate the received data
-    buffer[totalBytesRead] = '\0';
-        // printf("Received message: %s\n", buffer);
-
-}
-
-int main(int argc, char *argv[]) {
-    if (argc != 2) {
+    if (argc != 2)
+    {
         fprintf(stderr, "Usage: %s <port>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
@@ -63,26 +30,30 @@ int main(int argc, char *argv[]) {
 
     // Create socket
     int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket == -1) {
+    if (serverSocket == -1)
+    {
         perror("Error creating socket");
         exit(EXIT_FAILURE);
     }
 
     // Set up server address structure
     struct sockaddr_in serverAddr;
+    struct sockaddr_in clientAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
     serverAddr.sin_port = htons(my_port);
 
     // Bind the socket
-    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1)
+    {
         perror("Error binding socket");
         close(serverSocket);
         exit(EXIT_FAILURE);
     }
 
     // Listen for incoming connections
-    if (listen(serverSocket, 5) == -1) {
+    if (listen(serverSocket, 5) == -1)
+    {
         perror("Error listening");
         close(serverSocket);
         exit(EXIT_FAILURE);
@@ -90,12 +61,13 @@ int main(int argc, char *argv[]) {
 
     printf("Mail server listening on port %d...\n", my_port);
 
-    while (1) {
+    while (1)
+    {
         // Accept incoming connection
-        struct sockaddr_in clientAddr;
         socklen_t clientLen = sizeof(clientAddr);
-        int clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientLen);
-        if (clientSocket == -1) {
+        int clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientLen);
+        if (clientSocket == -1)
+        {
             perror("Error accepting connection");
             continue;
         }
@@ -103,19 +75,23 @@ int main(int argc, char *argv[]) {
         // Fork a new process to handle incoming mail
         pid_t pid = fork();
 
-        if (pid == -1) {
+        if (pid == -1)
+        {
             perror("Error forking process");
             close(clientSocket);
             continue;
         }
 
-        if (pid == 0) {
+        if (pid == 0)
+        {
             // In child process (R)
-            close(serverSocket);  // Close listening socket in child process
-            handleMail(clientSocket, "user", "iitkgp.edu");
+            close(serverSocket); // Close listening socket in child process
+            handleMail(clientSocket, "iitkgp.edu");
             close(clientSocket);
             exit(EXIT_SUCCESS);
-        } else {
+        }
+        else
+        {
             // In parent process, close client socket and continue accepting
             close(clientSocket);
         }
@@ -124,45 +100,742 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-void handleMail(int clientSocket, const char* username, const char* domain) {
-    time_t rawTime;
-    struct tm *info;
-
-    // Get current time
-    time(&rawTime);
-    info = localtime(&rawTime);
-    
+void handleMail(int clientSocket, const char *domain)
+{
     // Read and handle incoming mail
-    ssize_t bytesRead;
+    int index = 0;
+    // createUserDirectory(username);
 
-    char buffer[MAX_BUFFER_SIZE];
-    createUserDirectory(username);
+    //--------------------------------------------------------------------------------------------
 
     // Send acknowledgment on connection
-    sprintf(buffer,"220 <%s> Service ready\0",domain);
-    sendCommand(clientSocket,buffer);
-    printf("S: %s\n",buffer);
-    // Read the HELO message from the client
-    recvResponse(clientSocket,buffer);
-        // Print the client's HELO message
-
-    printf("C: %s\n",buffer);
-
-
-    // Send a response to the client (you may need to customize this)
+    char temp_buff[100];
     char response[MAX_BUFFER_SIZE];
-    sprintf(response,"250 OK %s\0",buffer);
-    sendCommand(clientSocket,response);
-        printf("S: %s\n",response);
+
+    // Prepare the response
+    snprintf(response, sizeof(response), "220 <%s> Service ready\r\n", domain);
+
+    int commandLength = strlen(response);
+    int bytesSent = 0;
+    int chunkSize;
+
+    while (bytesSent < commandLength)
+    {
+        // Clear the temp_buff
+        memset(temp_buff, 0, sizeof(temp_buff));
+
+        // Determine the size of the next chunk
+        chunkSize = commandLength - bytesSent;
+        if (chunkSize > sizeof(temp_buff) - 1)
+        {
+            chunkSize = sizeof(temp_buff) - 1;
+        }
+
+        // Copy the next chunk into temp_buff and null-terminate it
+        memcpy(temp_buff, &response[bytesSent], chunkSize);
+        temp_buff[chunkSize] = '\0';
+
+        // Send the chunk
+        if (send(clientSocket, temp_buff, strlen(temp_buff), 0) == -1)
+        {
+            perror("Error sending connection acknowledgment");
+            return;
+        }
+
+        // Print the sent chunk
+        // printf\("C: %s\n", temp_buff\);
+
+        // Update bytesSent
+        bytesSent += chunkSize;
+
+        // Break if the last chunk sent ends with "\r\n"
+        if (chunkSize >= 2 && strcmp(&temp_buff[chunkSize - 2], "\r\n") == 0)
+        {
+            break;
+        }
+    }
+    bytesSent = 0;
+    chunkSize = 0;
+
+    // Clear the response
+    memset(response, 0, sizeof(response));
+
+    //--------------------------------------------------------------------------------------------
+
+    // Read the HELO message from the client
+    char full_buff[MAX_BUFFER_SIZE] = {0};
+    while (1)
+    {
+        char c;
+        int result = recv(clientSocket, &c, 1, 0);
+        if (result <= 0)
+        {
+            perror("Error reading server response");
+            return;
+        }
+
+        full_buff[index] = c;
+        index++;
+
+        // Ensure the buffer is null-terminated
+        full_buff[index] = '\0';
+
+        // Break if the full buffer ends with "\r\n"
+        if (index >= 2 && full_buff[index - 2] == '\r' && full_buff[index - 1] == '\n')
+        {
+            break;
+        }
+    }
+    index = 0;
+    // Check if the client has quit
+    if (strncmp(full_buff, "QUIT", 4) == 0)
+    {
+        fprintf(stderr, "Received QUIT command from client: %s\n", full_buff);
+        return;
+    }
+
+    // Check the full response
+    if (strncmp(full_buff, "HELO ", 5) != 0)
+    {
+        fprintf(stderr, "Error: Unexpected response from client: %s\n", full_buff);
+        return;
+    }
+    // printf("C: %s\n", full_buff);
+    memset(full_buff, 0, sizeof(full_buff));
+    memset(response, 0, sizeof(response));
+
+    // Prepare the response
+    snprintf(response, sizeof(response), "250 OK Hello %s\r\n", domain);
+
+    commandLength = strlen(response);
+
+    while (bytesSent < commandLength)
+    {
+        // Clear the temp_buff
+        memset(temp_buff, 0, sizeof(temp_buff));
+
+        // Determine the size of the next chunk
+        chunkSize = commandLength - bytesSent;
+        if (chunkSize > sizeof(temp_buff) - 1)
+        {
+            chunkSize = sizeof(temp_buff) - 1;
+        }
+
+        // Copy the next chunk into temp_buff and null-terminate it
+        memcpy(temp_buff, &response[bytesSent], chunkSize);
+        temp_buff[chunkSize] = '\0';
+
+        // Send the chunk
+        if (send(clientSocket, temp_buff, strlen(temp_buff), 0) == -1)
+        {
+            perror("Error sending connection acknowledgment");
+            return;
+        }
+
+        // Print the sent chunk
+        // printf\("C: %s\n", temp_buff\);
+
+        // Update bytesSent
+        bytesSent += chunkSize;
+
+        // Break if the last chunk sent ends with "\r\n"
+        if (chunkSize >= 2 && strcmp(&temp_buff[chunkSize - 2], "\r\n") == 0)
+        {
+            break;
+        }
+    }
+    bytesSent = 0;
+    chunkSize = 0;
+
+    // Clear the response
+    memset(response, 0, sizeof(response));
+
+    //--------------------------------------------------------------------------------------------
+
+    // Read the MAIL FROM message from the client
+    while (1)
+    {
+        char c;
+        int result = recv(clientSocket, &c, 1, 0);
+        if (result <= 0)
+        {
+            perror("Error reading server response");
+            return;
+        }
+
+        full_buff[index] = c;
+        index++;
+
+        // Ensure the buffer is null-terminated
+        full_buff[index] = '\0';
+
+        // Break if the full buffer ends with "\r\n"
+        if (index >= 2 && full_buff[index - 2] == '\r' && full_buff[index - 1] == '\n')
+        {
+            break;
+        }
+    }
+    index = 0;
+    // Check if the client has quit
+    if (strncmp(full_buff, "QUIT", 4) == 0)
+    {
+        fprintf(stderr, "Received QUIT command from client: %s\n", full_buff);
+        return;
+    }
+
+    // Check the full response
+    if (strncmp(full_buff, "MAIL FROM: ", 11) != 0)
+    {
+        fprintf(stderr, "Error: Unexpected response from client: %s\n", full_buff);
+        return;
+    }
+    // Extract and store the sender email from full_buff
+    char sender_mail[100];
+    char *sender_start = strstr(full_buff, "<");
+    char *sender_end = strstr(full_buff, ">");
+    if (sender_start != NULL && sender_end != NULL)
+    {
+        int sender_length = sender_end - sender_start - 1;
+        char sender_mail[sender_length + 1];
+        strncpy(sender_mail, sender_start + 1, sender_length);
+        sender_mail[sender_length] = '\0';
+    }
+
+    // printf("C: %s\n", full_buff);
+    memset(full_buff, 0, sizeof(full_buff));
+    memset(response, 0, sizeof(response));
+
+    // Prepare the response
+    snprintf(response, sizeof(response), "250 <%s>...Sender ok\r\n", sender_mail);
+
+    commandLength = strlen(response);
+
+    while (bytesSent < commandLength)
+    {
+        // Clear the temp_buff
+        memset(temp_buff, 0, sizeof(temp_buff));
+
+        // Determine the size of the next chunk
+        chunkSize = commandLength - bytesSent;
+        if (chunkSize > sizeof(temp_buff) - 1)
+        {
+            chunkSize = sizeof(temp_buff) - 1;
+        }
+
+        // Copy the next chunk into temp_buff and null-terminate it
+        memcpy(temp_buff, &response[bytesSent], chunkSize);
+        temp_buff[chunkSize] = '\0';
+
+        // Send the chunk
+        if (send(clientSocket, temp_buff, strlen(temp_buff), 0) == -1)
+        {
+            perror("Error sending connection acknowledgment");
+            return;
+        }
+
+        // Print the sent chunk
+        // printf\("C: %s\n", temp_buff\);
+
+        // Update bytesSent
+        bytesSent += chunkSize;
+
+        // Break if the last chunk sent ends with "\r\n"
+        if (chunkSize >= 2 && strcmp(&temp_buff[chunkSize - 2], "\r\n") == 0)
+        {
+            break;
+        }
+    }
+    bytesSent = 0;
+    chunkSize = 0;
+
+    // Clear the response
+    memset(response, 0, sizeof(response));
+
+    //    //--------------------------------------------------------------------------------------------
+
+    // Read the RCPT TO message from the client
+    while (1)
+    {
+        char c;
+        int result = recv(clientSocket, &c, 1, 0);
+        if (result <= 0)
+        {
+            perror("Error reading server response");
+            return;
+        }
+
+        full_buff[index] = c;
+        index++;
+
+        // Ensure the buffer is null-terminated
+        full_buff[index] = '\0';
+
+        // Break if the full buffer ends with "\r\n"
+        if (index >= 2 && full_buff[index - 2] == '\r' && full_buff[index - 1] == '\n')
+        {
+            break;
+        }
+    }
+    index = 0;
+    // Check if the client has quit
+    if (strncmp(full_buff, "QUIT", 4) == 0)
+    {
+        fprintf(stderr, "Received QUIT command from client: %s\n", full_buff);
+        return;
+    }
+
+    // Check the full response
+    if (strncmp(full_buff, "RCPT TO: ", 9) != 0)
+    {
+        fprintf(stderr, "Error: Unexpected response from client: %s\n", full_buff);
+        return;
+    }
+
+    // Find the start and end positions of the target_usr_mail
+    char username[100] = {0}; // Initialize all elements to 0
+    char *start = strstr(full_buff, "RCPT TO: ");
+    char *end = strchr(start, '\r');
+    if (start != NULL && end != NULL)
+    {
+        // Calculate the length of the target_usr_mail
+        int length = end - (start + 9);
+
+        // Ensure length does not exceed the size of username - 1
+        if (length > sizeof(username) - 1)
+        {
+            length = sizeof(username) - 1;
+        }
+
+        // Extract the target_usr_mail and store it in the username variable
+        strncpy(username, start + 9, length);
+        username[length] = '\0'; // Ensure username is null-terminated
+
+        // Extract only the "X" from the username
+        char *atSymbol = strchr(username, '@');
+        if (atSymbol != NULL)
+        {
+            *atSymbol = '\0';
+        }
+    }
+    // printf("username: %s\n", username);
+
+    // printf("C: %s\n", full_buff);
+    memset(full_buff, 0, sizeof(full_buff));
+    memset(response, 0, sizeof(response));
+
+    // Prepare the response
+    snprintf(response, sizeof(response), "250 root...Recipient ok\r\n");
+
+    commandLength = strlen(response);
+
+    while (bytesSent < commandLength)
+    {
+        // Clear the temp_buff
+        memset(temp_buff, 0, sizeof(temp_buff));
+
+        // Determine the size of the next chunk
+        chunkSize = commandLength - bytesSent;
+        if (chunkSize > sizeof(temp_buff) - 1)
+        {
+            chunkSize = sizeof(temp_buff) - 1;
+        }
+
+        // Copy the next chunk into temp_buff and null-terminate it
+        memcpy(temp_buff, &response[bytesSent], chunkSize);
+        temp_buff[chunkSize] = '\0';
+
+        // Send the chunk
+        if (send(clientSocket, temp_buff, strlen(temp_buff), 0) == -1)
+        {
+            perror("Error sending connection acknowledgment");
+            return;
+        }
+
+        // Print the sent chunk
+        // printf\("C: %s\n", temp_buff\);
+
+        // Update bytesSent
+        bytesSent += chunkSize;
+
+        // Break if the last chunk sent ends with "\r\n"
+        if (chunkSize >= 2 && strcmp(&temp_buff[chunkSize - 2], "\r\n") == 0)
+        {
+            break;
+        }
+    }
+    bytesSent = 0;
+    chunkSize = 0;
+
+    // Clear the response
+    memset(response, 0, sizeof(response));
+
+    //--------------------------------------------------------------------------------------------
+    // Read the DATA message from the client
+    while (1)
+    {
+        char c;
+        int result = recv(clientSocket, &c, 1, 0);
+        if (result <= 0)
+        {
+            perror("Error reading server response");
+            return;
+        }
+
+        full_buff[index] = c;
+        index++;
+
+        // Ensure the buffer is null-terminated
+        full_buff[index] = '\0';
+
+        // Break if the full buffer ends with "\r\n"
+        if (index >= 2 && full_buff[index - 2] == '\r' && full_buff[index - 1] == '\n')
+        {
+            break;
+        }
+    }
+    index = 0;
+    // Check if the client has quit
+    if (strncmp(full_buff, "QUIT", 4) == 0)
+    {
+        fprintf(stderr, "Received QUIT command from client: %s\n", full_buff);
+        return;
+    }
+    // Check the full response
+    if (strncmp(full_buff, "DATA", 4) != 0)
+    {
+        fprintf(stderr, "Error: Unexpected response from client: %s\n", full_buff);
+        return;
+    }
+    // printf("C: %s\n", full_buff);
+    memset(full_buff, 0, sizeof(full_buff));
+    memset(response, 0, sizeof(response));
+
+    // Prepare the response
+    snprintf(response, sizeof(response), "354 Enter mail, end with \".\" on a line by itself\r\n");
+
+    commandLength = strlen(response);
+
+    while (bytesSent < commandLength)
+    {
+        // Clear the temp_buff
+        memset(temp_buff, 0, sizeof(temp_buff));
+
+        // Determine the size of the next chunk
+        chunkSize = commandLength - bytesSent;
+        if (chunkSize > sizeof(temp_buff) - 1)
+        {
+            chunkSize = sizeof(temp_buff) - 1;
+        }
+
+        // Copy the next chunk into temp_buff and null-terminate it
+        memcpy(temp_buff, &response[bytesSent], chunkSize);
+        temp_buff[chunkSize] = '\0';
+
+        // Send the chunk
+        if (send(clientSocket, temp_buff, strlen(temp_buff), 0) == -1)
+        {
+            perror("Error sending connection acknowledgment");
+            return;
+        }
+
+        // Print the sent chunk
+        // printf\("C: %s\n", temp_buff\);
+
+        // Update bytesSent
+        bytesSent += chunkSize;
+
+        // Break if the last chunk sent ends with "\r\n"
+        if (chunkSize >= 2 && strcmp(&temp_buff[chunkSize - 2], "\r\n") == 0)
+        {
+            break;
+        }
+    }
+    bytesSent = 0;
+    chunkSize = 0;
+
+    // Clear the response
+    memset(response, 0, sizeof(response));
+
+    //--------------------------------------------------------------------------------------------
+    // Read the mail content from the client
+    char full_buff_from[MAX_BUFFER_SIZE] = {0};
+    char full_buff_to[MAX_BUFFER_SIZE] = {0};
+    char full_buff_subject[MAX_BUFFER_SIZE] = {0};
+    char full_buff_message[MAX_BUFFER_SIZE] = {0};
+    while (1)
+    {
+        char c;
+        int result = recv(clientSocket, &c, 1, 0);
+        if (result <= 0)
+        {
+            perror("Error reading server response");
+            return;
+        }
+
+        full_buff_from[index] = c;
+        index++;
+
+        // Ensure the buffer is null-terminated
+        full_buff_from[index] = '\0';
+
+        // Break if the full buffer ends with "\r\n"
+        if (index >= 2 && full_buff_from[index - 2] == '\r' && full_buff_from[index - 1] == '\n')
+        {
+            break;
+        }
+    }
+    // printf("C: %s\n", full_buff_from);
+    index = 0;
+
+    while (1)
+    {
+        char c;
+        int result = recv(clientSocket, &c, 1, 0);
+        if (result <= 0)
+        {
+            perror("Error reading server response");
+            return;
+        }
+
+        full_buff_to[index] = c;
+        index++;
+
+        // Ensure the buffer is null-terminated
+        full_buff_to[index] = '\0';
+
+        // Break if the full buffer ends with "\r\n"
+        if (index >= 2 && full_buff_to[index - 2] == '\r' && full_buff_to[index - 1] == '\n')
+        {
+            break;
+        }
+    }
+    // printf("C: %s\n", full_buff_to);
+    index = 0;
+
+    while (1)
+    {
+        char c;
+        int result = recv(clientSocket, &c, 1, 0);
+        if (result <= 0)
+        {
+            perror("Error reading server response");
+            return;
+        }
+
+        full_buff_subject[index] = c;
+        index++;
+
+        // Ensure the buffer is null-terminated
+        full_buff_subject[index] = '\0';
+
+        // Break if the full buffer ends with "\r\n"
+        if (index >= 2 && full_buff_subject[index - 2] == '\r' && full_buff_subject[index - 1] == '\n')
+        {
+            break;
+        }
+    }
+    // printf("C: %s\n", full_buff_subject);
+    index = 0;
+
+    while (1)
+    {
+        char c;
+        int result = recv(clientSocket, &c, 1, 0);
+        if (result <= 0)
+        {
+            perror("Error reading server response");
+            return;
+        }
+
+        full_buff_message[index] = c;
+        index++;
+
+        // Ensure the buffer is null-terminated
+        full_buff_message[index] = '\0';
+
+        // Break if the full buffer ends with "\r\n"
+        if (index >= 3 && full_buff_message[index - 3] == '\r' && full_buff_message[index - 2] == '\n' && full_buff_message[index - 1] == '.')
+        {
+            break;
+        }
+    }
+    // printf("C: %s\n", full_buff_message);
+    index = 0;
+
+    createUserDirectoryandAppend(username, full_buff_from, full_buff_to, full_buff_subject, full_buff_message);
+
+    // Prepare the response
+    snprintf(response, sizeof(response), "250 OK Message accepted for delivery\r\n");
+
+    commandLength = strlen(response);
+
+    while (bytesSent < commandLength)
+    {
+        // Clear the temp_buff
+        memset(temp_buff, 0, sizeof(temp_buff));
+
+        // Determine the size of the next chunk
+        chunkSize = commandLength - bytesSent;
+        if (chunkSize > sizeof(temp_buff) - 1)
+        {
+            chunkSize = sizeof(temp_buff) - 1;
+        }
+
+        // Copy the next chunk into temp_buff and null-terminate it
+        memcpy(temp_buff, &response[bytesSent], chunkSize);
+        temp_buff[chunkSize] = '\0';
+
+        // Send the chunk
+        if (send(clientSocket, temp_buff, strlen(temp_buff), 0) == -1)
+        {
+            perror("Error sending connection acknowledgment");
+            return;
+        }
+
+        // Print the sent chunk
+        // printf\("C: %s\n", temp_buff\);
+
+        // Update bytesSent
+        bytesSent += chunkSize;
+
+        // Break if the last chunk sent ends with "\r\n"
+        if (chunkSize >= 2 && strcmp(&temp_buff[chunkSize - 2], "\r\n") == 0)
+        {
+            break;
+        }
+    }
+    bytesSent = 0;
+    chunkSize = 0;
+
+    // Clear the response
+    memset(response, 0, sizeof(response));
+
+    //--------------------------------------------------------------------------------------------
+    // Read the QUIT message from the client
+    while (1)
+    {
+        char c;
+        int result = recv(clientSocket, &c, 1, 0);
+        if (result <= 0)
+        {
+            perror("Error reading server response");
+            return;
+        }
+
+        full_buff[index] = c;
+        index++;
+
+        // Ensure the buffer is null-terminated
+        full_buff[index] = '\0';
+
+        // Break if the full buffer ends with "\r\n"
+        if (index >= 2 && full_buff[index - 2] == '\r' && full_buff[index - 1] == '\n')
+        {
+            // Ignore empty lines
+            if (index > 2)
+            {
+                break;
+            }
+            else
+            {
+                // Reset index to start filling the buffer from the beginning
+                index = 0;
+            }
+        }
+    }
+    index = 0;
+    // printf("C: %s\n", full_buff);
+    // Check if the client has quit
+    if (strncmp(full_buff, "QUIT", 4) == 0)
+    {
+        // Prepare the response
+        // printf("Sending QUIT response\n");
+        snprintf(response, sizeof(response), "221 %s closing connection\r\n", domain);
+
+        commandLength = strlen(response);
+
+        while (bytesSent < commandLength)
+        {
+            // Clear the temp_buff
+            memset(temp_buff, 0, sizeof(temp_buff));
+
+            // Determine the size of the next chunk
+            chunkSize = commandLength - bytesSent;
+            if (chunkSize > sizeof(temp_buff) - 1)
+            {
+                chunkSize = sizeof(temp_buff) - 1;
+            }
+
+            // Copy the next chunk into temp_buff and null-terminate it
+            memcpy(temp_buff, &response[bytesSent], chunkSize);
+            temp_buff[chunkSize] = '\0';
+
+            // Send the chunk
+            if (send(clientSocket, temp_buff, strlen(temp_buff), 0) == -1)
+            {
+                perror("Error sending connection acknowledgment");
+                return;
+            }
+
+            // Print the sent chunk
+            // printf\("C: %s\n", temp_buff\);
+
+            // Update bytesSent
+            bytesSent += chunkSize;
+
+            // Break if the last chunk sent ends with "\r\n"
+            if (chunkSize >= 2 && strcmp(&temp_buff[chunkSize - 2], "\r\n") == 0)
+            {
+                break;
+            }
+        }
+        bytesSent = 0;
+        chunkSize = 0;
+
+        // Clear the response
+        memset(response, 0, sizeof(response));
+
+        // fprintf(stderr, "Received QUIT command from client: %s\n", full_buff);
+        sleep(1);
+        return;
+    }
 }
 
-void createUserDirectory(const char* username) {
+void createUserDirectoryandAppend(const char *username, const char *full_buff_from, const char *full_buff_to, const char *full_buff_subject, const char *full_buff_message)
+{
     // Create user subdirectory if it doesn't exist
     char directoryPath[256];
     snprintf(directoryPath, sizeof(directoryPath), "./%s", username);
 
     struct stat st = {0};
-    if (stat(directoryPath, &st) == -1) {
+    if (stat(directoryPath, &st) == -1)
+    {
         mkdir(directoryPath, 0700);
     }
+
+    // Create a file named "mymailbox" within the user subdirectory
+    char filePath[256];
+    snprintf(filePath, sizeof(filePath), "./%s/mymailbox", username);
+
+    // Open the file for appending
+    FILE *file = fopen(filePath, "a");
+    if (file == NULL)
+    {
+        fprintf(stderr, "Error opening file: %s\n", filePath);
+        return;
+    }
+
+    // Get the current time
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+
+    // Write the message to the file
+    fprintf(file, "%s", full_buff_from);
+    fprintf(file, "%s", full_buff_to);
+    fprintf(file, "%s", full_buff_subject);
+    fprintf(file, "Received: %02d:%02d:%02d %02d/%02d/%04d\n", t->tm_hour, t->tm_min, t->tm_sec, t->tm_mday, t->tm_mon + 1, t->tm_year + 1900);
+    fprintf(file, "%s\n\n", full_buff_message);
+
+    // Close the file
+    fclose(file);
 }
