@@ -573,7 +573,14 @@ void sendMail(const char *serverIP, int smtpPort)
     index = 0;
 
     // Check the full response
-    if (strncmp(full_buff, "250 ", 4) != 0)
+    if (strncmp(full_buff, "550 ", 4) == 0)
+    {
+        fprintf(stderr, "Error: %s\n", full_buff);
+        send(clientSocket, "QUIT\r\n", 6, 0);
+        close(clientSocket);
+        return;
+    }
+    else if (strncmp(full_buff, "250 ", 4) != 0)
     {
         fprintf(stderr, "Error: Unexpected response from server: %s\n", full_buff);
         send(clientSocket, "QUIT\r\n", 6, 0);

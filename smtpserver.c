@@ -16,8 +16,52 @@
 void handleMail(int clientSocket, const char *domain);
 
 // Function to create user subdirectory if it doesn't exist
-void createUserDirectoryandAppend(const char *username, const char *full_buff_from, const char *full_buff_to, const char *full_buff_subject, const char *full_buff_message);
+int createUserDirectoryandAppend(const char *username, const char *full_buff_from, const char *full_buff_to, const char *full_buff_subject, const char *full_buff_message);
 
+
+#define MAX_LENGTH 50
+
+// Function to create user directories
+void create_user_directories(const char *username) {
+    char user_directory[MAX_LENGTH];
+    snprintf(user_directory, sizeof(user_directory), "./%s", username);
+    
+    // Create subdirectory for each user
+    struct stat st = {0};
+    if (stat(user_directory, &st) == -1)
+    {
+        mkdir(user_directory, 0700);
+    }
+
+}
+
+void createUserDirectory()
+{
+    FILE *file;
+    char line[MAX_LENGTH];
+    char username[MAX_LENGTH];
+    char password[MAX_LENGTH];
+    
+    // Open the file for reading
+    file = fopen("user.txt", "r");
+    
+    if (file == NULL) {
+        printf("Error: user.txt not found.\n");
+        return;
+    }
+
+    // Read user information from file
+    while (fgets(line, sizeof(line), file) != NULL) {
+        // Split line into username and password
+        sscanf(line, "%s %s", username, password);
+        
+        // Create user directory
+        create_user_directories(username);
+    }
+
+    // Close the file
+    fclose(file);
+}
 int main(int argc, char *argv[])
 {
     if (argc != 2)
@@ -60,7 +104,7 @@ int main(int argc, char *argv[])
     }
 
     printf("Mail server listening on port %d...\n", my_port);
-
+    createUserDirectory();
     while (1)
     {
         // Accept incoming connection
@@ -417,13 +461,18 @@ void handleMail(int clientSocket, const char *domain)
             *atSymbol = '\0';
         }
     }
-    // printf("username: %s\n", username);
-
-    // printf("C: %s\n", full_buff);
     memset(full_buff, 0, sizeof(full_buff));
     memset(response, 0, sizeof(response));
-
-    // Prepare the response
+    char directoryPath[256];
+    snprintf(directoryPath, sizeof(directoryPath), "./%s", username);
+    // int flag=0;
+    struct stat st = {0};
+    if (stat(directoryPath, &st) == -1)
+    {
+    snprintf(response, sizeof(response), "550 No such user\r\n");
+    // flag=1;
+    }
+    else
     snprintf(response, sizeof(response), "250 root...Recipient ok\r\n");
 
     commandLength = strlen(response);
@@ -662,7 +711,7 @@ void handleMail(int clientSocket, const char *domain)
     // printf("C: %s\n", full_buff_message);
     index = 0;
 
-    createUserDirectoryandAppend(username, full_buff_from, full_buff_to, full_buff_subject, full_buff_message);
+    int res=createUserDirectoryandAppend(username, full_buff_from, full_buff_to, full_buff_subject, full_buff_message);
 
     // Prepare the response
     snprintf(response, sizeof(response), "250 OK Message accepted for delivery\r\n");
@@ -801,7 +850,7 @@ void handleMail(int clientSocket, const char *domain)
     }
 }
 
-void createUserDirectoryandAppend(const char *username, const char *full_buff_from, const char *full_buff_to, const char *full_buff_subject, const char *full_buff_message)
+int createUserDirectoryandAppend(const char *username, const char *full_buff_from, const char *full_buff_to, const char *full_buff_subject, const char *full_buff_message)
 {
     // Create user subdirectory if it doesn't exist
     char directoryPath[256];
@@ -810,7 +859,8 @@ void createUserDirectoryandAppend(const char *username, const char *full_buff_fr
     struct stat st = {0};
     if (stat(directoryPath, &st) == -1)
     {
-        mkdir(directoryPath, 0700);
+        // mkdir(directoryPath, 0700);
+        return 0;
     }
 
     // Create a file named "mymailbox" within the user subdirectory
@@ -822,7 +872,7 @@ void createUserDirectoryandAppend(const char *username, const char *full_buff_fr
     if (file == NULL)
     {
         fprintf(stderr, "Error opening file: %s\n", filePath);
-        return;
+        return 0;
     }
 
     // Get the current time
@@ -838,4 +888,5 @@ void createUserDirectoryandAppend(const char *username, const char *full_buff_fr
 
     // Close the file
     fclose(file);
+    return 1;
 }
