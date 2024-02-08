@@ -10,192 +10,6 @@
 #define MAX_BUFFER_SIZE 10240
 
 // Function to send mail using SMTP protocol
-void sendMail(const char *serverIP, int smtpPort);
-
-int main(int argc, char *argv[])
-{
-    if (argc != 4)
-    {
-        fprintf(stderr, "Usage: %s <server_IP> <smtp_port> <pop3_port>\n", argv[0]);
-        exit(EXIT_FAILURE);
-    }
-
-    const char *serverIP = argv[1];
-    int smtpPort = atoi(argv[2]);
-    int pop3Port = atoi(argv[3]);
-
-    char username[256];
-    char password[256];
-
-    printf("Enter username: ");
-    scanf("%s", username);
-
-    printf("Enter password: ");
-    scanf("%s", password);
-
-    while (1)
-    {
-        int option;
-
-        printf("\nOptions:\n");
-        printf("1. Manage Mail\n");
-        printf("2. Send Mail\n");
-        printf("3. Quit\n");
-
-        printf("Enter your choice (1-3): ");
-        scanf("%d", &option);
-
-        switch (option)
-        {
-        case 1:
-            // Manage Mail: Implement logic to show stored mails
-            printf("Not implemented yet.\n");
-            break;
-
-        case 2:
-            // Send Mail: Implement logic to send mail using SMTP
-            sendMail(serverIP, smtpPort);
-            break;
-
-        case 3:
-            // Quit
-            printf("Quitting the program.\n");
-            exit(EXIT_SUCCESS);
-
-        default:
-            printf("Invalid option. Please choose again.\n");
-            break;
-        }
-    }
-
-    return 0;
-}
-
-// ----------------------------------------------------------------
-
-void extractField(char *mail, char *field, char *output)
-{
-    char *line = strstr(mail, field);
-    if (line)
-    {
-        char *start = line + strlen(field);
-        char *end = strchr(start, '\n');
-        if (end)
-        {
-            strncpy(output, start, end - start);
-            output[end - start] = '\0'; // Null terminate the copied string
-        }
-    }
-}
-
-void extractMessage(char *mail, char *output)
-{
-    char *start = strstr(mail, "Subject: ");
-    if (start)
-    {
-        start = strchr(start, '\n'); // Find the end of the Subject line
-        if (start)
-        {
-            start += 1; // Skip the newline character
-            char *end = strstr(start, "\n.\n");
-            if (end)
-            {
-                strncpy(output, start, end - start);
-                output[end - start] = '\0'; // Null terminate the copied string
-            }
-            else
-            {
-                // If there's no line with just '.', copy everything till the end
-                strcpy(output, start);
-            }
-        }
-    }
-}
-
-int isValidNumber(char *str)
-{
-    int len = strlen(str);
-    for (int i = 0; i < len; i++)
-    {
-        if (!isdigit(str[i]))
-        {
-            return 0;
-        }
-    }
-    return 1;
-}
-
-int isValidIP(char *ip)
-{
-    int num, dots = 0;
-    char *ptr;
-    char *ip_copy = strdup(ip); // Make a copy of the string
-
-    if (ip_copy == NULL)
-        return 0;
-
-    ptr = strtok(ip_copy, ".");
-
-    if (ptr == NULL)
-        return 0;
-
-    while (ptr)
-    {
-        /* after parsing string, it must contain only digits */
-        if (!isValidNumber(ptr))
-            return 0;
-
-        num = atoi(ptr);
-
-        /* check for valid IP */
-        if (num >= 0 && num <= 255)
-        {
-            /* parse remaining string */
-            ptr = strtok(NULL, ".");
-            if (ptr != NULL)
-                ++dots;
-        }
-        else
-            return 0;
-    }
-
-    /* valid IP string must contain 3 dots */
-    if (dots != 3)
-        return 0;
-    free(ip_copy); // Free the copied string
-    return 1;
-}
-
-int isValidEmail(char *email)
-{
-    char *at = strchr(email, '@');
-    if (at == NULL)
-    {
-        return 0;
-    }
-    char *domain = at + 1;
-    if (isValidIP(domain))
-    {
-        return 1;
-    }
-    else
-    {
-        char *dot = strchr(domain, '.');
-        if (dot == NULL || strchr(dot + 1, '.') != NULL)
-        {
-            return 0;
-        }
-        return 1;
-    }
-}
-
-int isValidSubject(char *subject)
-{
-    return strlen(subject) <= 50;
-}
-
-// ----------------------------------------------------------------
-
 void sendMail(const char *serverIP, int smtpPort)
 {
 
@@ -1032,4 +846,357 @@ void sendMail(const char *serverIP, int smtpPort)
         close(clientSocket);
         return;
     }
+}
+
+int main(int argc, char *argv[])
+{
+    if (argc != 4)
+    {
+        fprintf(stderr, "Usage: %s <server_IP> <smtp_port> <pop3_port>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    const char *serverIP = argv[1];
+    int smtpPort = atoi(argv[2]);
+    int pop3Port = atoi(argv[3]);
+
+    char username[256];
+    char password[256];
+
+    printf("Enter username: ");
+    scanf("%s", username);
+
+    printf("Enter password: ");
+    scanf("%s", password);
+
+    while (1)
+    {
+        int option;
+
+        printf("\nOptions:\n");
+        printf("1. Manage Mail\n");
+        printf("2. Send Mail\n");
+        printf("3. Quit\n");
+
+        printf("Enter your choice (1-3): ");
+        scanf("%d", &option);
+
+        switch (option)
+        {
+        case 1:
+            // Manage Mail: Implement logic to show stored mails
+            accessMailbox(serverIP,pop3Port,username,password);
+            break;
+
+        case 2:
+            // Send Mail: Implement logic to send mail using SMTP
+            sendMail(serverIP, smtpPort);
+            break;
+
+        case 3:
+            // Quit
+            printf("Quitting the program.\n");
+            exit(EXIT_SUCCESS);
+
+        default:
+            printf("Invalid option. Please choose again.\n");
+            break;
+        }
+    }
+
+    return 0;
+}
+
+// ----------------------------------------------------------------
+
+void extractField(char *mail, char *field, char *output)
+{
+    char *line = strstr(mail, field);
+    if (line)
+    {
+        char *start = line + strlen(field);
+        char *end = strchr(start, '\n');
+        if (end)
+        {
+            strncpy(output, start, end - start);
+            output[end - start] = '\0'; // Null terminate the copied string
+        }
+    }
+}
+
+void extractMessage(char *mail, char *output)
+{
+    char *start = strstr(mail, "Subject: ");
+    if (start)
+    {
+        start = strchr(start, '\n'); // Find the end of the Subject line
+        if (start)
+        {
+            start += 1; // Skip the newline character
+            char *end = strstr(start, "\n.\n");
+            if (end)
+            {
+                strncpy(output, start, end - start);
+                output[end - start] = '\0'; // Null terminate the copied string
+            }
+            else
+            {
+                // If there's no line with just '.', copy everything till the end
+                strcpy(output, start);
+            }
+        }
+    }
+}
+
+int isValidNumber(char *str)
+{
+    int len = strlen(str);
+    for (int i = 0; i < len; i++)
+    {
+        if (!isdigit(str[i]))
+        {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int isValidIP(char *ip)
+{
+    int num, dots = 0;
+    char *ptr;
+    char *ip_copy = strdup(ip); // Make a copy of the string
+
+    if (ip_copy == NULL)
+        return 0;
+
+    ptr = strtok(ip_copy, ".");
+
+    if (ptr == NULL)
+        return 0;
+
+    while (ptr)
+    {
+        /* after parsing string, it must contain only digits */
+        if (!isValidNumber(ptr))
+            return 0;
+
+        num = atoi(ptr);
+
+        /* check for valid IP */
+        if (num >= 0 && num <= 255)
+        {
+            /* parse remaining string */
+            ptr = strtok(NULL, ".");
+            if (ptr != NULL)
+                ++dots;
+        }
+        else
+            return 0;
+    }
+
+    /* valid IP string must contain 3 dots */
+    if (dots != 3)
+        return 0;
+    free(ip_copy); // Free the copied string
+    return 1;
+}
+
+int isValidEmail(char *email)
+{
+    char *at = strchr(email, '@');
+    if (at == NULL)
+    {
+        return 0;
+    }
+    char *domain = at + 1;
+    if (isValidIP(domain))
+    {
+        return 1;
+    }
+    else
+    {
+        char *dot = strchr(domain, '.');
+        if (dot == NULL || strchr(dot + 1, '.') != NULL)
+        {
+            return 0;
+        }
+        return 1;
+    }
+}
+
+int isValidSubject(char *subject)
+{
+    return strlen(subject) <= 50;
+}
+void recvMessage(int clientSocket,char* full_buff)
+{
+    int index = 0;
+    memset(full_buff, 0, sizeof(full_buff));
+
+    while (1)
+    {
+        char c;
+        int result = recv(clientSocket, &c, 1, 0);
+        if (result <= 0)
+        {
+            perror("Error reading server response");
+            return;
+        }
+
+        full_buff[index] = c;
+        index++;
+
+        // Ensure the buffer is null-terminated
+        full_buff[index] = '\0';
+
+        // Break if the full buffer ends with "\r\n"
+        if (index >= 2 && full_buff[index - 2] == '\r' && full_buff[index - 1] == '\n')
+        {
+            break;
+        }
+    }
+    index = 0;
+
+}
+void sendMessage(int clientSocket,char* command)
+{
+      int commandLength = strlen(command);
+    int bytesSent = 0;
+    int chunkSize;
+        char temp_buff[100];
+
+
+    while (bytesSent < commandLength)
+    {
+
+        memset(temp_buff, 0, sizeof(temp_buff));
+
+        // Determine the size of the next chunk
+        chunkSize = commandLength - bytesSent;
+        if (chunkSize > sizeof(temp_buff) - 1)
+        {
+            chunkSize = sizeof(temp_buff) - 1;
+        }
+
+        // Copy the next chunk into temp_buff and null-terminate it
+        memcpy(temp_buff, &command[bytesSent], chunkSize);
+        temp_buff[chunkSize] = '\0';
+
+        // Send the chunk
+        if (send(clientSocket, temp_buff, strlen(temp_buff), 0) == -1)
+        {
+            perror("Error sending HELO command");
+            send(clientSocket, "QUIT\r\n", 6, 0);
+            close(clientSocket);
+            return;
+        }
+
+        // Update bytesSent
+        bytesSent += chunkSize;
+
+        // Break if the last chunk sent ends with "\r\n"
+        if (chunkSize >= 2 && strcmp(&temp_buff[chunkSize - 2], "\r\n") == 0)
+        {
+            break;
+        }
+    }
+}
+// ----------------------------------------------------------------
+
+void accessMailbox(const char *serverIP, int pop3port,char* username,char* password)
+{
+
+
+    // Create socket
+    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocket == -1)
+    {
+        perror("Error creating socket");
+        return;
+    }
+
+    // Set up server address structure
+    struct sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(pop3port);
+    if (inet_pton(AF_INET, serverIP, &(serverAddr.sin_addr)) <= 0)
+    {
+        perror("Invalid server IP address");
+        close(clientSocket);
+        return;
+    }
+
+    // Connect to the SMTP server
+    if (connect(clientSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1)
+    {
+        perror("Error connecting to server");
+        close(clientSocket);
+        return;
+    }
+    // Read the initial response from the server
+    char temp_buff[100];
+    char full_buff[MAX_BUFFER_SIZE] = {0}; // Increase size as needed
+    char command[MAX_BUFFER_SIZE];
+
+    // ----------------------------------------------------------------
+    recvMessage(clientSocket,full_buff);
+     if (strncmp(full_buff, "-ERR", 4) == 0)
+    {
+        fprintf(stderr, "Error: %s\n", full_buff);
+        send(clientSocket, "QUIT\r\n", 6, 0);
+        close(clientSocket);
+        return;
+    }
+    else if (strncmp(full_buff, "+OK", 3) != 0)
+    {
+        fprintf(stderr, "Error: Unexpected response from server: %s\n", full_buff);
+        send(clientSocket, "QUIT\r\n", 6, 0);
+        close(clientSocket);
+        return;
+    }
+
+    snprintf(command, sizeof(command), "USER: %s\r\n", username);
+    sendMessage(clientSocket,command);
+    // ----------------------------------------------
+    recvMessage(clientSocket,full_buff);
+    if (strncmp(full_buff, "-ERR", 4) == 0)
+    {
+        fprintf(stderr, "Error: %s\n", full_buff);
+        send(clientSocket, "QUIT\r\n", 6, 0);
+        close(clientSocket);
+        return;
+    }
+    else if (strncmp(full_buff, "+OK", 3) != 0)
+    {
+        fprintf(stderr, "Error: Unexpected response from server: %s\n", full_buff);
+        send(clientSocket, "QUIT\r\n", 6, 0);
+        close(clientSocket);
+        return;
+    }
+
+    memset(command, 0, sizeof(command));
+
+    // ----------------------------------------------------------------
+
+   snprintf(command, sizeof(command), "PASS: %s\r\n", password);
+    sendMessage(clientSocket,command);
+    // ----------------------------------------------
+    recvMessage(clientSocket,full_buff);
+    if (strncmp(full_buff, "-ERR", 4) == 0)
+    {
+        fprintf(stderr, "Error: %s\n", full_buff);
+        send(clientSocket, "QUIT\r\n", 6, 0);
+        close(clientSocket);
+        return;
+    }
+    else if (strncmp(full_buff, "+OK", 3) != 0)
+    {
+        fprintf(stderr, "Error: Unexpected response from server: %s\n", full_buff);
+        send(clientSocket, "QUIT\r\n", 6, 0);
+        close(clientSocket);
+        return;
+    }
+    memset(command, 0, sizeof(command));
+    printf("end of pop3 client\n");
 }
