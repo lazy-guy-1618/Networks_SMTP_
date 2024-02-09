@@ -1106,7 +1106,7 @@ void sendMessage(int clientSocket,char* command)
     }
 }
 // ----------------------------------------------------------------
-void deleteMail(int clientSocket,int eno)
+void deleteMail(int clientSocket,int eno,int* toDelete,int numEmails)
 {
         char command[100],full_buff[40];
         memset(command, 0, sizeof(command));
@@ -1275,7 +1275,7 @@ void accessMailbox(const char *serverIP, int pop3port,char* username,char* passw
         char c=getchar();
         if(c=='d')
         {
-            deleteMail(clientSocket,eno);
+            deleteMail(clientSocket,eno,toDelete,numEmails);
         }
         
 
