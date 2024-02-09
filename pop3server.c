@@ -18,6 +18,7 @@
 
 // Function to handle incoming mail
 void handleMail(int clientSocket, const char *domain);
+void handlePOP3(int clientSocket, const char *domain);
 
 // Function to create user subdirectory if it doesn't exist
 int createUserDirectoryandAppend(const char *username, const char *full_buff_from, const char *full_buff_to, const char *full_buff_subject, const char *full_buff_message);
@@ -84,7 +85,7 @@ int authenticate(char* user, char*pass)
     
     if (file == NULL) {
         printf("Error: user.txt not found.\n");
-        return;
+        return 0;
     }
 
     // Read user information from file
@@ -366,6 +367,49 @@ void parseEmails(FILE *file, struct Email* emails, int *numEmails) {
     *numEmails = count;
 }
 
+void deleteEmails(FILE *mailboxFile, int* toDelete, int numEmails) {
+    char *emails[MAX_EMAILS];
+    int emailCount = 0;
+
+    // Read emails into dynamic array
+    rewind(mailboxFile); // Go to the start of the file
+    char c, prev1 = 0, prev2 = 0, prev3 = 0;
+    int i = 0;
+    emails[emailCount] = malloc(MAX_EMAILS);
+    while ((c = fgetc(mailboxFile)) != EOF) {
+        emails[emailCount][i++] = c;
+        if (prev3 == '\n' && prev2 == '.' && prev1 == '\n' && c == '\n') { // End of an email
+            emails[emailCount][i] = '\0';
+            emailCount++;
+            i = 0;
+            emails[emailCount] = malloc(MAX_EMAILS);
+        }
+        prev3 = prev2;
+        prev2 = prev1;
+        prev1 = c;
+    }
+
+    // Delete the specified emails in the order they are given
+    for (int k = 1; k <= numEmails; k++) {
+        if (toDelete[k] == 1) {
+            int index = k - 1; // Subtract 1 because indices are 1-based
+            free(emails[index]);
+            for (int i = index; i < emailCount - 1; i++) {
+                emails[i] = emails[i + 1];
+            }
+            emailCount--;
+        }
+    }
+
+    // Write the remaining emails back to the file
+    freopen(NULL, "w", mailboxFile); // Clear the file
+    for (int i = 0; i < emailCount; i++) {
+        fputs(emails[i], mailboxFile);
+        free(emails[i]);
+    }
+    fflush(mailboxFile); // Make sure all changes are written to the file
+}
+
 void handlePOP3(int clientSocket, const char *domain)
 {
     // Read and handle incoming mail
@@ -526,10 +570,20 @@ void handlePOP3(int clientSocket, const char *domain)
         if (strncmp(full_buff, "QUIT", 4) == 0)
         {
             fprintf(stderr, "Received QUIT command from client: %s\n", full_buff);
-            for(int i=0;i<numEmails;i++)
-            {
-                //delete emails from file
+            int toDelete[numEmails+1];
+            memset(toDelete, 0, sizeof(toDelete));
+
+            //delete emails from file
+            
+
+            for (int i = numEmails - 1; i >= 0; i--) {
+                if (toDelete[i+1] == 1) {
+                    toDelete[numEmails - i] = i;
+                }
             }
+            
+            deleteEmails(mailboxFile, toDelete, numEmails);
+
             memset(response, 0, sizeof(response));
             snprintf(response, sizeof(response), "+OK goodbye\r\n");
             sendMessage(clientSocket,response);
@@ -692,7 +746,7 @@ void handlePOP3(int clientSocket, const char *domain)
             snprintf(response,sizeof(response),"+OK\r\n");
             for(int i=0;i<numEmails;i++)
             {
-                if(toDelete[i+1]==1) continue;
+            if(toDelete[i+1]==1) continue;
             memset(response, 0, sizeof(response));
             k++;
             char numStr[20]; // Assuming a maximum of 20 digits for the integer
