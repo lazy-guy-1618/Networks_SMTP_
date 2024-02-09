@@ -1121,7 +1121,7 @@ void deleteMail(int clientSocket,int eno)
         }
         else if(strncmp(full_buff, "+OK", 3)==0)
         {
-            printf("Message Deleted\n");
+            printf("Message %d Deleted\n",eno);
         }
         else
         {
@@ -1250,11 +1250,23 @@ void accessMailbox(const char *serverIP, int pop3port,char* username,char* passw
         memset(command, 0, sizeof(command));
         snprintf(command, sizeof(command), "NOOP\r\n");
         sendMessage(clientSocket,command);
+        if (strncmp(full_buff, "-ERR", 4) == 0)
+        {
+        fprintf(stderr, "Error: %s\n", full_buff);
+        send(clientSocket, "QUIT\r\n", 6, 0);
+        close(clientSocket);
+        return;
+        }
+        else if(strncmp(full_buff, "+OK", 3)==0)
+        {
+
+        }
+
         numEmails=0;
         do
         {
         recvMessage(clientSocket,full_buff);
-        if(strcmp(full_buff,".")!=0 && strncmp(full_buff, "+OK", 3)!=0)
+        if(strcmp(full_buff,".")!=0)
         {
             printf("%s\n",full_buff);
             numEmails++;
@@ -1266,20 +1278,42 @@ void accessMailbox(const char *serverIP, int pop3port,char* username,char* passw
 
         while(eno<-1 || eno==0 || eno>numEmails)
         {
-        printf("Mail no. out of range, give again");
+        printf("Mail no. out of range, give again: ");
         scanf("%d",&eno);
         }
         if(eno==-1)break;
 
         retrieveMail(clientSocket,eno);
-        char c=getchar();
+        printf("\n-----------------------------------------\n");
+        char c;
+        while ((c = getchar()) != '\n' && c != EOF);
+
+        c=getchar();
         if(c=='d')
         {
             deleteMail(clientSocket,eno);
         }
+       
         
 
     }
+    memset(command, 0, sizeof(command));
+    snprintf(command, sizeof(command), "QUIT\r\n");
+    sendMessage(clientSocket,command);
+
+    recvMessage(clientSocket,full_buff);
+    if (strncmp(full_buff, "-ERR", 4) == 0)
+    {
+    fprintf(stderr, "Error: %s\n", full_buff);
+    send(clientSocket, "QUIT\r\n", 6, 0);
+    // close(clientSocket);
+    return;
+    }
+    else if(strncmp(full_buff, "+OK", 3)==0)
+    {
+
+    }
+
 
     // printf("end of pop3 client\n");
 }

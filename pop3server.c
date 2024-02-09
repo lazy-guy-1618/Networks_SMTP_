@@ -415,12 +415,19 @@ void handlePOP3(int clientSocket, const char *domain)
         user[user_length] = '\0';
         
     }
-
-    //--------------------------------------------------------------------------------------------
     memset(response, 0, sizeof(response));
-    // Prepare the response
+    char directoryPath[256];
+    snprintf(directoryPath, sizeof(directoryPath), "./%s", user);
+    struct stat st = {0};
+    if (stat(directoryPath, &st) == -1)
+    {
+    snprintf(response, sizeof(response), "-ERR No such user\r\n");
+    }
+    else{
     snprintf(response, sizeof(response), "+OK\r\n");
 
+    }
+    //--------------------------------------------------------------------------------------------
     sendMessage(clientSocket,response);
 
     //--------------------------------------------------------------------------------------------
@@ -461,16 +468,9 @@ void handlePOP3(int clientSocket, const char *domain)
     }
     printf("Username: %s| password: %s\n",user,pass);
     memset(response, 0, sizeof(response));
-    char directoryPath[256];
-    snprintf(directoryPath, sizeof(directoryPath), "./%s", user);
-    struct stat st = {0};
-    if (stat(directoryPath, &st) == -1)
-    {
-    snprintf(response, sizeof(response), "-ERR No such user\r\n");
-    // flag=1;
-    }
-    else
-    {
+    
+ 
+    
         int res=authenticate(user,pass);
         if(res==2)
             snprintf(response, sizeof(response), "-ERR Username and Password did not match\r\n");
@@ -479,7 +479,7 @@ void handlePOP3(int clientSocket, const char *domain)
         else if(res==1)
             snprintf(response, sizeof(response), "+OK\r\n");
 
-    } 
+    
 
 
 
@@ -529,10 +529,9 @@ void handlePOP3(int clientSocket, const char *domain)
             for(int i=0;i<numEmails;i++)
             {
                 //delete emails from file
-
             }
             memset(response, 0, sizeof(response));
-            snprintf(response, sizeof(response), "+OK\r\n");
+            snprintf(response, sizeof(response), "+OK goodbye\r\n");
             sendMessage(clientSocket,response);
 
 
@@ -546,25 +545,60 @@ void handlePOP3(int clientSocket, const char *domain)
         }
         else if (strncmp(full_buff, "STAT", 4) == 0)
         {
+            totsize=0;
+            int n=0;
+            for(int i=0;i<numEmails;i++) 
+            {
+            if(toDelete[i+1]==1)continue;
+            totsize+=emails[i].size;
+            n++;
+            }
             
             memset(response, 0, sizeof(response));
-            snprintf(response, sizeof(response), "+OK %d %d\r\n",numEmails,totsize);
+            snprintf(response, sizeof(response), "+OK %d %d\r\n",n,totsize);
             sendMessage(clientSocket,response);
         }
         else if (strncmp(full_buff, "LIST", 4) == 0)
         {
-            
-            int i;
-            
+            if(strlen(full_buff)>5)
+            {
+                int eno=0;
+  
+            char arg[20];
+            strcpy(arg, full_buff + 5);
+        
+            eno=atoi(arg);
             memset(response, 0, sizeof(response));
-            snprintf(response, sizeof(response), "+OK %d messages(%d octets)\r\n",numEmails,totsize);
+            if(toDelete[eno]==1)
+            {
+            snprintf(response, sizeof(response), "-ERR Email has been deleted\r\n");
+            }
+            else
+            snprintf(response, sizeof(response), "+OK %d %d\r\n",eno,emails[eno-1].size);
+
+            sendMessage(clientSocket,response);
+            }
+            else{
+
+            
+            int k=0,n=0;
+            totsize=0;
+           for(int i=0;i<numEmails;i++) 
+            {
+            if(toDelete[i+1]==1)continue;
+            totsize+=emails[i].size;
+            n++;
+            }
+            memset(response, 0, sizeof(response));
+            snprintf(response, sizeof(response), "+OK %d messages(%d octets)\r\n",n,totsize);
             sendMessage(clientSocket,response);
 
-            for(i=0;i<numEmails;i++)
+            for(int i=0;i<numEmails;i++)
             {
                 if(toDelete[i+1]==1)continue;
+                k++;
             memset(response, 0, sizeof(response));
-            snprintf(response, sizeof(response), "%d %d\r\n",i+1,emails[i].size);
+            snprintf(response, sizeof(response), "%d %d\r\n",k,emails[i].size);
             sendMessage(clientSocket,response);
 
             }
@@ -572,7 +606,7 @@ void handlePOP3(int clientSocket, const char *domain)
             memset(response, 0, sizeof(response));
             snprintf(response, sizeof(response), ".\r\n");
             sendMessage(clientSocket,response);
-            printf("LIST \n");
+            }
         }
         else if (strncmp(full_buff, "RETR", 4) == 0)
         {
@@ -620,11 +654,25 @@ void handlePOP3(int clientSocket, const char *domain)
         }
         else if (strncmp(full_buff, "DELE", 4) == 0)
         {
-            int del=0;
-            sscanf(full_buff, "DELE %d", &del);  
-            toDelete[del]=1;
+            int del=0,i,d;
+            sscanf(full_buff, "DELE %d", &del);
+            d=del;
+            for(i=1;i<=numEmails && del>0;i++)
+            {
+                if(toDelete[i]==1)continue;
+                del--;
+            }  
+            i--;
+            // printf("deleting mail at %d\n",i);
             memset(response, 0, sizeof(response));
-            snprintf(response,sizeof(response),"+OK\r\n");
+            if(i<=numEmails)
+            {
+            toDelete[i]=1;
+            snprintf(response,sizeof(response),"+OK message %d deleted\r\n",d);
+            }
+            else
+            snprintf(response,sizeof(response),"-ERR Invalid Mail Number\r\n");
+
             sendMessage(clientSocket,response);
         }
         else if (strncmp(full_buff, "RSET", 4) == 0)
@@ -639,14 +687,27 @@ void handlePOP3(int clientSocket, const char *domain)
         }
         else if (strncmp(full_buff, "NOOP", 4) == 0)
         {
+            int k=0;
             memset(response, 0, sizeof(response));
             snprintf(response,sizeof(response),"+OK\r\n");
             for(int i=0;i<numEmails;i++)
             {
                 if(toDelete[i+1]==1) continue;
             memset(response, 0, sizeof(response));
-            snprintf(response, sizeof(response), "%d %s %s %s\r\n",i+1,emails[i].from,emails[i].received,emails[i].subject);
-            // snprintf(response, sizeof(response), "%d %s %s\r\n",i+1,emails[i].from);
+            k++;
+            char numStr[20]; // Assuming a maximum of 20 digits for the integer
+            sprintf(numStr, "%d", k);
+            // Copy the formatted string to the response buffer
+            strcpy(response, numStr);
+            // Concatenate the other fields with appropriate separators
+            strcat(response, " ");
+            strcat(response, emails[i].from);
+            strcat(response, " ");
+            strcat(response, emails[i].received);
+            strcat(response, " ");
+            strcat(response, emails[i].subject);
+            strcat(response, "\r\n");
+            // snprintf(response, sizeof(response), "%d %s %s %s\r\n",k,emails[i].from,emails[i].received,emails[i].subject);
            
             sendMessage(clientSocket,response);
             }
