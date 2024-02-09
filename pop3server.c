@@ -12,8 +12,9 @@
 #include <fcntl.h>
 
 
-#define MAX_BUFFER_SIZE 1024
+#define MAX_BUFFER_SIZE 10240
 #define MAX_SUBJECT_SIZE 100
+#define MAX_EMAILS 1000
 
 // Function to handle incoming mail
 void handleMail(int clientSocket, const char *domain);
@@ -294,7 +295,77 @@ void recvMessage(int clientSocket,char* full_buff)
             break;
         }
     }
+    full_buff[index-1]='\0';
+    full_buff[index-2]='\0';
 }
+
+struct Email {
+    char from[100];
+    char to[100];
+    char subject[100];
+    char received[100];
+    char body[10000];
+    int size;
+};
+
+void parseEmails(FILE *file, struct Email* emails, int *numEmails) {
+    char line[10000];
+    int count = 0;
+    emails[0].size=0;
+    memset(emails[0].body, '\0', sizeof(emails[0].body));
+
+    while (fgets(line, sizeof(line), file) != NULL && count<=MAX_EMAILS) {
+        if (strncmp(line, "From: ", 6) == 0) {
+            memset(emails[count].from, '\0', sizeof(emails[count].from));
+            char temp[1000];
+            sscanf(line, "From: %[^\n]", temp);
+            temp[sizeof(temp) - 1] = '\0';
+            strcpy(emails[count].from,temp);
+
+            emails[count].size+=strlen(line);
+
+        } else if (strncmp(line, "To: ", 4) == 0) {
+            memset(emails[count].to, '\0', sizeof(emails[count].to));
+
+            char temp[1000];
+            sscanf(line, "To: %[^\n]", temp);
+            temp[sizeof(temp) - 1] = '\0';
+            strcpy(emails[count].to,temp);
+            emails[count].size+=strlen(line);
+
+        } else if (strncmp(line, "Subject: ", 9) == 0) {
+            memset(emails[count].subject, '\0', sizeof(emails[count].subject));
+            char temp[1000];
+            sscanf(line, "Subject: %[^\n]",temp);
+            temp[sizeof(temp) - 1] = '\0';
+            strcpy(emails[count].subject,temp);
+            emails[count].size+=strlen(line);
+
+        } else if (strncmp(line, "Received: ", 10) == 0) {
+            memset(emails[count].received, '\0', sizeof(emails[count].received));
+            char temp[1000];
+            sscanf(line, "Received: %[^\n]", temp);
+            temp[sizeof(temp) - 1] = '\0';
+            strcpy(emails[count].received,temp);
+            emails[count].size+=strlen(line);
+
+        } else if (strlen(line) > 2) { // Non-empty line, consider as part of body
+            
+            strcat(emails[count].body, line);
+            emails[count].size+=strlen(line);
+
+        } else if(strlen(line) ==1) { // Empty line indicates end of email body
+            
+            count++;
+            emails[count].size=0;
+            memset(emails[count].body, '\0', sizeof(emails[count].body));
+
+        }
+    }
+
+    *numEmails = count;
+}
+
 void handlePOP3(int clientSocket, const char *domain)
 {
     // Read and handle incoming mail
@@ -302,7 +373,7 @@ void handlePOP3(int clientSocket, const char *domain)
     printf("client accepted... \n");
     char response[MAX_BUFFER_SIZE];
     // Prepare the response
-    snprintf(response, sizeof(response), "+OK POP3 server ready\r\n", domain);
+    snprintf(response, sizeof(response), "+OK POP3 server ready\r\n");
 
     sendMessage(clientSocket,response);
     // Read the USER message from the client
@@ -330,7 +401,7 @@ void handlePOP3(int clientSocket, const char *domain)
     // Extract and store the sender email from full_buff
     char user[100];
     char *user_start = strstr(full_buff, "USER: ");
-    char *user_end = strstr(full_buff, "\r");
+    char *user_end = strstr(full_buff, "\0");
     if (user_start != NULL && user_end != NULL)
     {
         int user_length = user_end - user_start - 6;
@@ -348,7 +419,7 @@ void handlePOP3(int clientSocket, const char *domain)
     //--------------------------------------------------------------------------------------------
     memset(response, 0, sizeof(response));
     // Prepare the response
-    snprintf(response, sizeof(response), "+OK\r\n", domain);
+    snprintf(response, sizeof(response), "+OK\r\n");
 
     sendMessage(clientSocket,response);
 
@@ -370,7 +441,7 @@ void handlePOP3(int clientSocket, const char *domain)
     // Find the start and end positions of the target_usr_mail
     char pass[100] = {0}; // Initialize all elements to 0
     char *start = strstr(full_buff, "PASS: ");
-    char *end = strchr(start, '\r');
+    char *end = strchr(start, '\0');
     if (start != NULL && end != NULL)
     {
         // Calculate the length of the target_usr_mail
@@ -425,17 +496,180 @@ void handlePOP3(int clientSocket, const char *domain)
         snprintf(response, sizeof(response), "-ERR Mailbox could not be opened\r\n");
         sendMessage(clientSocket,response);
         close(clientSocket);
+        unlockMailbox(mailboxPath);
+
         exit(EXIT_FAILURE);
     }
     sendMessage(clientSocket,response);
+    printf("here\n");
+    struct Email* emails=(struct Email*)malloc(MAX_EMAILS*sizeof(struct Email));
+    int numEmails=0;
+    parseEmails(mailboxFile,emails,&numEmails);
+    int toDelete[numEmails];
+    memset(toDelete, 0, sizeof(toDelete));
 
-    printf("end of pop3 server\n");
+     // Printing the parsed emails
+    for (int i = 0; i < numEmails; i++) {
+        printf("From: %s\n", emails[i].from);
+        printf("To: %s\n", emails[i].to);
+        printf("Subject: %s\n", emails[i].subject);
+        printf("Received: %s\n", emails[i].received);
+        printf("Body: %s\n", emails[i].body);
+        printf("\n");
+    }
+    int totsize=0;
+    for(int i=0;i<numEmails;i++) totsize+=emails[i].size;
+    while(1)
+    {
+        recvMessage(clientSocket,full_buff);
 
-    
-    close(clientSocket);
+        if (strncmp(full_buff, "QUIT", 4) == 0)
+        {
+            fprintf(stderr, "Received QUIT command from client: %s\n", full_buff);
+            for(int i=0;i<numEmails;i++)
+            {
+                //delete emails from file
+
+            }
+            memset(response, 0, sizeof(response));
+            snprintf(response, sizeof(response), "+OK\r\n");
+            sendMessage(clientSocket,response);
+
+
+            fclose(mailboxFile);
+            // Unlock mailbox resources
+            unlockMailbox(mailboxPath);
+            close(clientSocket);
+
+            // break;
+            return;
+        }
+        else if (strncmp(full_buff, "STAT", 4) == 0)
+        {
+            
+            memset(response, 0, sizeof(response));
+            snprintf(response, sizeof(response), "+OK %d %d\r\n",numEmails,totsize);
+            sendMessage(clientSocket,response);
+        }
+        else if (strncmp(full_buff, "LIST", 4) == 0)
+        {
+            
+            int i;
+            
+            memset(response, 0, sizeof(response));
+            snprintf(response, sizeof(response), "+OK %d messages(%d octets)\r\n",numEmails,totsize);
+            sendMessage(clientSocket,response);
+
+            for(i=0;i<numEmails-1;i++)
+            {
+            memset(response, 0, sizeof(response));
+            snprintf(response, sizeof(response), "%d %d\r\n",i+1,emails[i].size);
+            sendMessage(clientSocket,response);
+
+            }
+        
+            memset(response, 0, sizeof(response));
+            snprintf(response, sizeof(response), ".\r\n");
+            sendMessage(clientSocket,response);
+            printf("LIST \n");
+        }
+        else if (strncmp(full_buff, "RETR", 4) == 0)
+        {
+            int eno=0;
+
+            sscanf(full_buff, "RETR %d", &eno);
+            int i=eno-1;
+            
+            if(eno<=numEmails)
+            {
+            memset(response, 0, sizeof(response));
+            snprintf(response, sizeof(response), "+OK\r\n");
+            sendMessage(clientSocket,response);
+
+            memset(response, 0, sizeof(response));
+            snprintf(response,sizeof(response),"From: %s\r\n", emails[i].from);
+            sendMessage(clientSocket,response);
+
+            memset(response, 0, sizeof(response));
+            snprintf(response,sizeof(response),"To: %s\r\n", emails[i].to);
+            sendMessage(clientSocket,response);
+
+            memset(response, 0, sizeof(response));
+            snprintf(response,sizeof(response),"Subject: %s\r\n", emails[i].subject);
+            sendMessage(clientSocket,response);
+
+            memset(response, 0, sizeof(response));
+            snprintf(response,sizeof(response),"Received: %s\r\n", emails[i].received);
+            sendMessage(clientSocket,response);
+
+            memset(response, 0, sizeof(response));
+            snprintf(response,sizeof(response),"Body: %s\r\n", emails[i].body);
+            sendMessage(clientSocket,response);
+
+            memset(response, 0, sizeof(response));
+            snprintf(response,sizeof(response),".\r\n");
+            sendMessage(clientSocket,response);
+
+            }
+            else{
+            memset(response, 0, sizeof(response));
+            snprintf(response, sizeof(response), "-ERR Some error occured\r\n");
+            sendMessage(clientSocket,response);
+            }
+        }
+        else if (strncmp(full_buff, "DELE", 4) == 0)
+        {
+            int del=0;
+            sscanf(full_buff, "DELE %d", &del);  
+            toDelete[del]=1;
+            memset(response, 0, sizeof(response));
+            snprintf(response,sizeof(response),"+OK\r\n");
+            sendMessage(clientSocket,response);
+        }
+        else if (strncmp(full_buff, "RSET", 4) == 0)
+        {
+            for(int i=0;i<numEmails;i++)
+            {
+                toDelete[i]=0;
+            }
+            memset(response, 0, sizeof(response));
+            snprintf(response,sizeof(response),"+OK\r\n");
+            sendMessage(clientSocket,response);
+        }
+        else if (strncmp(full_buff, "NOOP", 4) == 0)
+        {
+            memset(response, 0, sizeof(response));
+            snprintf(response,sizeof(response),"+OK\r\n");
+            for(int i=0;i<numEmails;i++)
+            {
+            memset(response, 0, sizeof(response));
+            snprintf(response, sizeof(response), "%d %s %s %s\r\n",i+1,emails[i].from,emails[i].received,emails[i].subject);
+            // snprintf(response, sizeof(response), "%d %s %s\r\n",i+1,emails[i].from);
+           
+            sendMessage(clientSocket,response);
+            }
+            memset(response, 0, sizeof(response));
+            snprintf(response, sizeof(response), ".\r\n");
+            sendMessage(clientSocket,response);
+
+        }
+        else
+        {
+            memset(response, 0, sizeof(response));
+            snprintf(response,sizeof(response),"-ERR Unexpected message from client\r\n");
+            sendMessage(clientSocket,response);
+        }
+   
+
+
+
+    }
+    //clear delete queue
+
     fclose(mailboxFile);
     // Unlock mailbox resources
     unlockMailbox(mailboxPath);
+    close(clientSocket);
 
     
 }

@@ -1056,7 +1056,10 @@ void recvMessage(int clientSocket,char* full_buff)
             break;
         }
     }
+    full_buff[index-2]='\0';
+    full_buff[index-1]='\0';
     index = 0;
+        // printf("Received: %s\n",full_buff);
 
 }
 void sendMessage(int clientSocket,char* command)
@@ -1103,7 +1106,50 @@ void sendMessage(int clientSocket,char* command)
     }
 }
 // ----------------------------------------------------------------
+void deleteMail(int clientSocket,int eno)
+{
+        char command[100],full_buff[40];
+        memset(command, 0, sizeof(command));
+        snprintf(command, sizeof(command), "DELE %d\r\n",eno);
+        sendMessage(clientSocket,command);
+        
+       
+        recvMessage(clientSocket,full_buff);
+        if(strncmp(full_buff, "-ERR", 4)==0)
+        {
+            fprintf(stderr,"Error: %s",full_buff);
+        }
+        else if(strncmp(full_buff, "+OK", 3)==0)
+        {
+            printf("Message Deleted\n");
+        }
+        else
+        {
+            fprintf(stderr,"Unexpected response: %s",full_buff);
 
+        }
+
+}
+void retrieveMail(int clientSocket,int eno)
+{
+        char command[100],full_buff[MAX_BUFFER_SIZE];
+        memset(command, 0, sizeof(command));
+        snprintf(command, sizeof(command), "RETR %d\r\n",eno);
+        sendMessage(clientSocket,command);
+        do
+        {
+        recvMessage(clientSocket,full_buff);
+        if(strncmp(full_buff, "-ERR", 4)==0)
+        {
+            fprintf(stderr,"Error: %s",full_buff);
+        }
+        else if(strlen(full_buff)>1 && strncmp(full_buff, "+OK", 3)!=0)
+        {
+            printf("%s\n",full_buff);
+        }
+        } while (strncmp(full_buff, ".", 1) != 0);
+
+}
 void accessMailbox(const char *serverIP, int pop3port,char* username,char* password)
 {
 
@@ -1197,6 +1243,43 @@ void accessMailbox(const char *serverIP, int pop3port,char* username,char* passw
         close(clientSocket);
         return;
     }
-    memset(command, 0, sizeof(command));
-    printf("end of pop3 client\n");
+    int eno=0;
+    int numEmails=0;
+    while(1)
+    {
+        memset(command, 0, sizeof(command));
+        snprintf(command, sizeof(command), "NOOP\r\n");
+        sendMessage(clientSocket,command);
+        numEmails=0;
+        do
+        {
+        recvMessage(clientSocket,full_buff);
+        if(strcmp(full_buff,".")!=0 && strncmp(full_buff, "+OK", 3)!=0)
+        {
+            printf("%s\n",full_buff);
+            numEmails++;
+        }
+        } while (strncmp(full_buff, ".", 1) != 0);
+        // printf("Number of emails: %d \n",numEmails);
+        printf("Enter mail no. to see: ");
+        scanf("%d",&eno);
+
+        while(eno<-1 || eno==0 || eno>numEmails)
+        {
+        printf("Mail no. out of range, give again");
+        scanf("%d",&eno);
+        }
+        if(eno==-1)break;
+
+        retrieveMail(clientSocket,eno);
+        char c=getchar();
+        if(c=='d')
+        {
+            deleteMail(clientSocket,eno);
+        }
+        
+
+    }
+
+    // printf("end of pop3 client\n");
 }
