@@ -439,12 +439,13 @@ void handleMail(int clientSocket, const char *domain)
 
     // Find the start and end positions of the target_usr_mail
     char username[100] = {0}; // Initialize all elements to 0
-    char *start = strstr(full_buff, "RCPT TO: ");
-    char *end = strchr(start, '\r');
+    char *start = strstr(full_buff, "<");
+    char *end = strstr(full_buff, ">");
+   
     if (start != NULL && end != NULL)
     {
         // Calculate the length of the target_usr_mail
-        int length = end - (start + 9);
+        int length = end - (start + 1);
 
         // Ensure length does not exceed the size of username - 1
         if (length > sizeof(username) - 1)
@@ -453,7 +454,7 @@ void handleMail(int clientSocket, const char *domain)
         }
 
         // Extract the target_usr_mail and store it in the username variable
-        strncpy(username, start + 9, length);
+        strncpy(username, start + 1, length);
         username[length] = '\0'; // Ensure username is null-terminated
 
         // Extract only the "X" from the username

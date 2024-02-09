@@ -320,7 +320,7 @@ void sendMail(const char *serverIP, int smtpPort)
     // ----------------------------------------------------------------
 
     // Send RCPT TO command
-    snprintf(command, sizeof(command), "RCPT TO: %s\r\n", to);
+    snprintf(command, sizeof(command), "RCPT TO: <%s>\r\n", to);
 
     commandLength = strlen(command);
 

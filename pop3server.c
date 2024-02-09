@@ -396,13 +396,16 @@ void deleteEmails(FILE *mailboxFile, int* toDelete, int numEmails) {
             free(emails[index]);
             for (int i = index; i < emailCount - 1; i++) {
                 emails[i] = emails[i + 1];
+
             }
+            // printf("deleting: %d\n",k);
             emailCount--;
         }
     }
 
     // Write the remaining emails back to the file
     freopen(NULL, "w", mailboxFile); // Clear the file
+    // printf("emails: %d\n",emailCount);
     for (int i = 0; i < emailCount; i++) {
         fputs(emails[i], mailboxFile);
         free(emails[i]);
@@ -479,6 +482,10 @@ void handlePOP3(int clientSocket, const char *domain)
     if (strncmp(full_buff, "QUIT", 4) == 0)
     {
         fprintf(stderr, "Received QUIT command from client: %s\n", full_buff);
+        memset(response, 0, sizeof(response));
+        snprintf(response, sizeof(response), "+OK goodbye\r\n");
+        sendMessage(clientSocket,response);
+        close(clientSocket);
         return;
     }
 
@@ -545,7 +552,6 @@ void handlePOP3(int clientSocket, const char *domain)
         exit(EXIT_FAILURE);
     }
     sendMessage(clientSocket,response);
-    printf("here\n");
     struct Email* emails=(struct Email*)malloc(MAX_EMAILS*sizeof(struct Email));
     int numEmails=0;
     parseEmails(mailboxFile,emails,&numEmails);
@@ -553,14 +559,14 @@ void handlePOP3(int clientSocket, const char *domain)
     memset(toDelete, 0, sizeof(toDelete));
 
      // Printing the parsed emails
-    for (int i = 0; i < numEmails; i++) {
-        printf("From: %s\n", emails[i].from);
-        printf("To: %s\n", emails[i].to);
-        printf("Subject: %s\n", emails[i].subject);
-        printf("Received: %s\n", emails[i].received);
-        printf("Body: %s\n", emails[i].body);
-        printf("\n");
-    }
+    // for (int i = 0; i < numEmails; i++) {
+    //     printf("From: %s\n", emails[i].from);
+    //     printf("To: %s\n", emails[i].to);
+    //     printf("Subject: %s\n", emails[i].subject);
+    //     printf("Received: %s\n", emails[i].received);
+    //     printf("Body: %s\n", emails[i].body);
+    //     printf("\n");
+    // }
     int totsize=0;
     for(int i=0;i<numEmails;i++) totsize+=emails[i].size;
     while(1)
@@ -570,8 +576,8 @@ void handlePOP3(int clientSocket, const char *domain)
         if (strncmp(full_buff, "QUIT", 4) == 0)
         {
             fprintf(stderr, "Received QUIT command from client: %s\n", full_buff);
-            int toDelete[numEmails+1];
-            memset(toDelete, 0, sizeof(toDelete));
+            // int toDelete[numEmails+1];
+            // memset(toDelete, 0, sizeof(toDelete));
 
             //delete emails from file
             
