@@ -505,7 +505,7 @@ void handlePOP3(int clientSocket, const char *domain)
     struct Email* emails=(struct Email*)malloc(MAX_EMAILS*sizeof(struct Email));
     int numEmails=0;
     parseEmails(mailboxFile,emails,&numEmails);
-    int toDelete[numEmails];
+    int toDelete[numEmails+1];
     memset(toDelete, 0, sizeof(toDelete));
 
      // Printing the parsed emails
@@ -560,8 +560,9 @@ void handlePOP3(int clientSocket, const char *domain)
             snprintf(response, sizeof(response), "+OK %d messages(%d octets)\r\n",numEmails,totsize);
             sendMessage(clientSocket,response);
 
-            for(i=0;i<numEmails-1;i++)
+            for(i=0;i<numEmails;i++)
             {
+                if(toDelete[i+1]==1)continue;
             memset(response, 0, sizeof(response));
             snprintf(response, sizeof(response), "%d %d\r\n",i+1,emails[i].size);
             sendMessage(clientSocket,response);
@@ -628,7 +629,7 @@ void handlePOP3(int clientSocket, const char *domain)
         }
         else if (strncmp(full_buff, "RSET", 4) == 0)
         {
-            for(int i=0;i<numEmails;i++)
+            for(int i=1;i<=numEmails;i++)
             {
                 toDelete[i]=0;
             }
@@ -642,6 +643,7 @@ void handlePOP3(int clientSocket, const char *domain)
             snprintf(response,sizeof(response),"+OK\r\n");
             for(int i=0;i<numEmails;i++)
             {
+                if(toDelete[i+1]==1) continue;
             memset(response, 0, sizeof(response));
             snprintf(response, sizeof(response), "%d %s %s %s\r\n",i+1,emails[i].from,emails[i].received,emails[i].subject);
             // snprintf(response, sizeof(response), "%d %s %s\r\n",i+1,emails[i].from);
